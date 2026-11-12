@@ -1,28 +1,22 @@
-# BT Cloud Auto Verify
+宝塔云WAF行为验证绕过是一个用 Python 编写的单文件脚本，用于识别并处理宝塔云 WAF 的几种行为验证流程。脚本通过 `requests` 保持会话，根据响应内容判断验证类型，再提取参数、计算结果并提交校验。
 
-Protocol notes and Python code for recognizing several BT Cloud WAF challenge flows.
+脚本支持的验证类型包括五秒盾或跳转验证、人机验证和滑块验证。五秒盾或跳转验证的页面特征是 `btwaf=`，处理方式是提取跳转参数，并在当前会话中请求对应地址。人机验证的页面特征是 `renji_`、`bt-info`，处理方式是加载页面引用的脚本，提取参数并计算校验值。滑块验证的页面特征是 `huadong_`，处理方式是提取滑块验证参数，计算后提交到对应接口。
 
-## Supported modes
+页面同时包含 `renji_`、`bt-info` 和“人机识别”时，脚本会将其提示为定时人机检测，后续仍按人机验证流程处理。
 
-| Mode | Page clue | Handling |
-| --- | --- | --- |
-| Five-second shield | `btwaf=` | Retry with the returned cookie |
-| Invisible check | `renji_` and `bt-info` | Extract the embedded values and calculate the response |
-| Slider | `huadong_` | Use the slider offset and the matching verification endpoint |
+五秒盾或跳转验证会返回 `btwaf` 参数。脚本提取该参数并请求对应地址，让服务器在当前会话中设置 Cookie。
 
-## Behind the flow
+人机验证会加载 `renji_*.js` 脚本。脚本读取其中的 `key` 和 `value`，将 `value` 中各字符的 ASCII 编码拼接后计算 MD5，再把结果提交到 `yanzheng_ip.php`。
 
-The five-second shield sets a cookie and redirects the browser. Retrying with that cookie is enough; no calculation is needed.
+滑块验证采用类似流程，但每个字符的 ASCII 编码会先加一，再拼接并计算 MD5，最后提交到 `yanzheng_huadong.php`。提交后，脚本会重新请求目标地址，并检查响应中是否仍有验证特征。
 
-The invisible check loads a `renji_*.js` file containing a key and value. The script calculates the ASCII-based MD5 value and submits it to `yanzheng_ip.php`.
-
-The slider flow is similar, but each byte is shifted by one and the result is sent to `yanzheng_huadong.php`.
-
-## Usage
+先安装依赖，再传入目标地址：
 
 ```bash
 pip install requests
 python cloud_verify.py http://target.example/
 ```
 
-For security research and authorized testing only.
+脚本只接受一个目标地址参数，运行过程中会输出识别到的验证类型、接口响应和最终检查结果。
+
+仅供安全研究和已授权测试使用。
